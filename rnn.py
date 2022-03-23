@@ -135,4 +135,3 @@ if __name__ == '__main__':
     loss = loss_fn(y_test_pred.view(-1, 1), y_test).numpy()
     print(loss)
 
-

@@ -16,7 +16,7 @@ class HMM():
 
         self.read_data(route)
         self.preprocess_data()
-        self.discrete_outcomes(4, 4, 4, 10)
+        self.discrete_outcomes(10, 4, 4)
 
         self.hmm = GaussianHMM(n_components=hidden_states)
 
@@ -28,10 +28,10 @@ class HMM():
         data = np.array(self.data.iloc[:, 1:5].values).astype(np.float32)[0::self.time_sampling, :]
 
         # extract features
-        feat_change = (data[:-1, 3] - data[:-1, 0]) / data[:-1, 0]  # (close - open) / open
-        feat_high = (data[:-1, 1] - data[:-1, 0]) / data[:-1, 0]    # (high - open) / open
-        feat_low = (data[:-1, 0] - data[:-1, 2]) / data[:-1, 0]     # (open - low) / open
-        feat_per = (data[1:, 0] - data[:-1, 0]) / data[:-1, 0]      # (next_open - open) / open
+        feat_change = (data[:, 3] - data[:, 0]) / data[:, 0]  # (close - open) / open
+        feat_high = (data[:, 1] - data[:, 0]) / data[:, 0]  # (high - open) / open
+        feat_low = (data[:, 0] - data[:, 2]) / data[:, 0]  # (open - low) / open
+        feat_per = (data[1:, 0] - data[:-1, 0]) / data[:-1, 0]  # (next_open - open) / open
 
         # train test split
         self.train_length = int(self.training_ratio * data.shape[0])
@@ -41,24 +41,24 @@ class HMM():
         # stack the feats ((fc, fh, fl, fp))
         self.train_feat = np.column_stack((feat_change[:self.train_length],
                                            feat_high[:self.train_length],
-                                           feat_low[:self.train_length],
-                                           feat_per[:self.train_length]))
+                                           feat_low[:self.train_length]))
+        # feat_per[:self.train_length]))
         self.test_feat = np.column_stack((feat_change[self.train_length:],
                                           feat_high[self.train_length:],
-                                          feat_low[self.train_length:],
-                                          feat_per[self.train_length:]))
+                                          feat_low[self.train_length:]))
+                                          # feat_per[self.train_length:]))
 
     # train the hmm model
     def fit(self):
         self.hmm.fit(self.train_feat)
 
     # identify the possible outcomes, for later picking the one that maximizes the posterior probability
-    def discrete_outcomes(self, fc_samples, fh_samples, fl_samples, fp_samples):
+    def discrete_outcomes(self, fc_samples, fh_samples, fl_samples):
         fc = np.linspace(-0.015, 0.015, fc_samples)
         fh = np.linspace(0, 0.025, fh_samples)
         fl = np.linspace(0, 0.02, fl_samples)
-        fp = np.linspace(-0.5, 0.4, fp_samples)
-        self.possible_outcomes = np.array(list(itertools.product(fc, fh, fl, fp)))
+        # fp = np.linspace(-0.5, 0.4, fp_samples)
+        self.possible_outcomes = np.array(list(itertools.product(fc, fh, fl)))
 
     def predict(self, sets="test"):
         if sets == "test":
@@ -68,13 +68,13 @@ class HMM():
             feat = self.train_feat
             openp = self.train_data[:, 0]
 
-        predicted_open = []
+        predicted_close = []
         for t in range(feat.shape[0]):
             open_price = openp[t]
-            predicted_open_price = (self.ml_outcome(feat, t) + 1) * open_price # inverse function of (next_open - open) / open
-            predicted_open.append(predicted_open_price)
-            print(f"predicted: {t} / {feat.shape[0]}")
-        return predicted_open
+            predicted_close_price = (self.ml_outcome(feat, t) + 1) * open_price  # inverse function of (next_open - open) / open
+            predicted_close.append(predicted_close_price)
+            print(f"predicted: {t+1} / {feat.shape[0]}")
+        return predicted_close
 
     def ml_outcome(self, feat, t):
         start = max(0, t - self.period)
@@ -90,15 +90,16 @@ class HMM():
                 max_score = score
                 max_outcome = outcome
 
-        return max_outcome[3]
+        return max_outcome[0]
 
 
 if __name__ == '__main__':
-    hmm = HMM("dataset.csv", "day", 7)
+    hmm = HMM("dataset.csv", "day", 1)
+    print(hmm.period)
     hmm.fit()
     prediction = hmm.predict("test")
 
-    plt.plot(range(hmm.test_data[:, 0].shape[0]), hmm.test_data[:, 0], 'r', label='Actual Open Price')
-    plt.plot(range(len(prediction)), prediction, label='Predicted Open Price')
+    plt.plot(range(hmm.test_data[:, 3].shape[0]), hmm.test_data[:, 3], 'r', label='Actual Close Price')
+    plt.plot(range(len(prediction)), prediction, label='Predicted Close Price')
     plt.legend()
     plt.show()
