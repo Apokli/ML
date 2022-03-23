@@ -31,7 +31,6 @@ class HMM():
         feat_change = (data[:, 3] - data[:, 0]) / data[:, 0]  # (close - open) / open
         feat_high = (data[:, 1] - data[:, 0]) / data[:, 0]  # (high - open) / open
         feat_low = (data[:, 0] - data[:, 2]) / data[:, 0]  # (open - low) / open
-        feat_per = (data[1:, 0] - data[:-1, 0]) / data[:-1, 0]  # (next_open - open) / open
 
         # train test split
         self.train_length = int(self.training_ratio * data.shape[0])
@@ -42,11 +41,9 @@ class HMM():
         self.train_feat = np.column_stack((feat_change[:self.train_length],
                                            feat_high[:self.train_length],
                                            feat_low[:self.train_length]))
-        # feat_per[:self.train_length]))
         self.test_feat = np.column_stack((feat_change[self.train_length:],
                                           feat_high[self.train_length:],
                                           feat_low[self.train_length:]))
-                                          # feat_per[self.train_length:]))
 
     # train the hmm model
     def fit(self):
@@ -57,7 +54,6 @@ class HMM():
         fc = np.linspace(-0.015, 0.015, fc_samples)
         fh = np.linspace(0, 0.025, fh_samples)
         fl = np.linspace(0, 0.02, fl_samples)
-        # fp = np.linspace(-0.5, 0.4, fp_samples)
         self.possible_outcomes = np.array(list(itertools.product(fc, fh, fl)))
 
     def predict(self, sets="test"):
