@@ -7,7 +7,7 @@ import itertools
 
 
 class HMM():
-    def __init__(self, route, time_unit, period, hidden_states=4, training_ratio=0.9):
+    def __init__(self, route, time_unit, period, hidden_states=3, training_ratio=0.9):
         self.time_convert = {"minute": 1, "hour": 60, "day": 60 * 24, "week": 60 * 24 * 7}
         self.time_unit = time_unit
         self.time_sampling = self.time_convert[self.time_unit]
@@ -25,17 +25,26 @@ class HMM():
 
     def preprocess_data(self):
         # prices when open, high, low, close
-        data = np.array(self.data.iloc[:, 1:5].values).astype(np.float32)[0::self.time_sampling, :]
+        data = np.array(self.data.iloc[-525600:, 1:5].values)
+
+        data_open = data[:, 0][0::self.time_sampling]
+        data_high = np.array([])
+        data_low = np.array([])
+        data_close = data[:, 3][self.time_sampling - 1::self.time_sampling]
+        for i in range(len(data_open)):
+            data_high = np.append(data_high, np.amax(data[:, 1][(self.time_sampling * i): (self.time_sampling * (i + 1))]))
+            data_low = np.append(data_low, np.amin(data[:, 2][(self.time_sampling * i): (self.time_sampling * (i + 1))]))
+        data = np.column_stack((data_open, data_high, data_low, data_close))
 
         # extract features
-        feat_change = (data[:, 3] - data[:, 0]) / data[:, 0]  # (close - open) / open
-        feat_high = (data[:, 1] - data[:, 0]) / data[:, 0]  # (high - open) / open
-        feat_low = (data[:, 0] - data[:, 2]) / data[:, 0]  # (open - low) / open
+        feat_change = (data_close - data_open) / data_open
+        feat_high = (data_high - data_open) / data_open
+        feat_low = (data_open - data_low) / data_open
 
         # train test split
         self.train_length = int(self.training_ratio * data.shape[0])
-        self.train_data = data[:self.train_length]
-        self.test_data = data[self.train_length:]
+        self.train_data = data[:self.train_length, :]
+        self.test_data = data[self.train_length:, :]
 
         # stack the feats ((fc, fh, fl, fp))
         self.train_feat = np.column_stack((feat_change[:self.train_length],
@@ -74,10 +83,10 @@ class HMM():
 
     def ml_outcome(self, feat, t):
         start = max(0, t - self.period)
-        end = max(0, t - 1)
+        end = max(0, t)
         feats = feat[start:end]
 
-        max_score = -1
+        max_score = -1000
         max_outcome = None
         for outcome in self.possible_outcomes:
             total_data = np.row_stack((feats, outcome))
@@ -90,8 +99,7 @@ class HMM():
 
 
 if __name__ == '__main__':
-    hmm = HMM("dataset.csv", "day", 1)
-    print(hmm.period)
+    hmm = HMM("dataset.csv", "day", 7)
     hmm.fit()
     prediction = hmm.predict("test")
 

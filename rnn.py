@@ -9,6 +9,7 @@ import matplotlib.pyplot as plt
 
 time_convert = {"minute": 1, "hour": 60, "day": 60 * 24, "week": 60 * 24 * 7}
 
+
 # The RNN module
 class RNN(nn.Module):
     def __init__(self, i_size, h_size, num_layers=1):
@@ -17,16 +18,16 @@ class RNN(nn.Module):
         self.hidden_size = h_size
         self.input_size = i_size
 
-        self.rnn1 = nn.LSTM(i_size, h_size, num_layers, batch_first=True)   # the LSTM RNN layer
+        self.rnn1 = nn.LSTM(i_size, h_size, num_layers, batch_first=True)  # the LSTM RNN layer
         # self.dropout = nn.Dropout(p=0.20)
-        self.dense1 = nn.Linear(8, 4)   # fully connected layers
-        self.dense2 = nn.Linear(4, 1)   # fully connected layers
+        self.dense1 = nn.Linear(8, 4)  # fully connected layers
+        self.dense2 = nn.Linear(4, 1)  # fully connected layers
 
     def forward(self, x):
         x_batch = x.view(len(x), 1, -1)
         hidden = torch.zeros(self.num_layers, x.size(0), self.hidden_size)  # initializing hidden layers
-        cells = torch.zeros(self.num_layers, x.size(0), self.hidden_size)   # initializing memory cells
-        x_r, (hidden, cells) = self.rnn1(x_batch, (hidden, cells))          # passing through the LSTM layer
+        cells = torch.zeros(self.num_layers, x.size(0), self.hidden_size)  # initializing memory cells
+        x_r, (hidden, cells) = self.rnn1(x_batch, (hidden, cells))  # passing through the LSTM layer
         # x_d = self.dropout(x_r)
         x_l = self.dense1(x_r)
         x_l2 = self.dense2(x_l)
@@ -36,8 +37,16 @@ class RNN(nn.Module):
 
 # Data Preprocessing
 def preprocess_data(data, prediction_period, training_ratio=0.9, time_sampling=1):
-    # prices when open
-    data_sample = np.array(data.iloc[:, 1:5].values).astype(np.float32)[0::time_sampling]
+    # all prices
+    datas = np.array(data.iloc[-525600:, 1:5].values)
+    data_open = datas[:, 0][0::time_sampling]
+    data_high = np.array([])
+    data_low = np.array([])
+    data_close = datas[:, 3][time_sampling - 1::time_sampling]
+    for i in range(len(data_open)):
+        data_high = np.append(data_high, np.amax(datas[:, 1][(time_sampling * i): (time_sampling * (i + 1))]))
+        data_low = np.append(data_low, np.amin(datas[:, 2][(time_sampling * i): (time_sampling * (i + 1))]))
+    data_sample = np.column_stack((data_open, data_high, data_low, data_close))
 
     # normalization to [0, 1]
     mns = MinMaxScaler()
@@ -56,7 +65,7 @@ def preprocess_data(data, prediction_period, training_ratio=0.9, time_sampling=1
     y_test = []
     # reform it into data-matrices to train prediction model
     for i in range(len(train_set) - prediction_period):
-        X_train.append(np.append(train_set[i : (i + prediction_period), :], train_set[i + prediction_period, 0]))
+        X_train.append(np.append(train_set[i: (i + prediction_period), :], train_set[i + prediction_period, 0]))
         y_train.append(train_set[i + prediction_period, 3])
     for i in range(len(test_set) - prediction_period):
         X_test.append(np.append(test_set[i: (i + prediction_period), :], test_set[i + prediction_period, 0]))
@@ -80,8 +89,9 @@ if __name__ == '__main__':
     # ------------------------------ Data Preprocessing -------------------------------
     data = read_data("dataset.csv")
     time_unit = "day"
-    prediction_period = 7   # 7 time units for a prediction
-    X_train, X_test, y_train, y_test, mns = preprocess_data(data, prediction_period, training_ratio=0.9, time_sampling=time_convert[time_unit])
+    prediction_period = 3  # 7 time units for a prediction
+    X_train, X_test, y_train, y_test, mns = preprocess_data(data, prediction_period, training_ratio=0.9,
+                                                            time_sampling=time_convert[time_unit])
     print(f"shape of X_train in {time_unit}s:", X_train.shape)
     print(f"shape of y_train in {time_unit}s:", y_train.shape)
     print(f"shape of X_test in {time_unit}s:", X_test.shape)
@@ -107,12 +117,13 @@ if __name__ == '__main__':
 
     model.eval()
     with torch.no_grad():
-        y_train_pred = model(X_train)   # the prediction of prices of train data (normalized)
-        y_test_pred = model(X_test)     # the prediction of prices of test data (normalized)
+        y_train_pred = model(X_train)  # the prediction of prices of train data (normalized)
+        y_test_pred = model(X_test)  # the prediction of prices of test data (normalized)
 
     # Training Data
-    train_pred = mns.inverse_transform(np.tile(y_train_pred.numpy().squeeze().reshape(-1, 1), (1, 4)))[:, 3]  # denormalize
-    train_actual = mns.inverse_transform(np.tile(y_train.numpy().reshape(-1, 1), (1, 4)))[:, 3]               # denormalize
+    train_pred = mns.inverse_transform(np.tile(y_train_pred.numpy().squeeze().reshape(-1, 1), (1, 4)))[:,
+                 3]  # denormalize
+    train_actual = mns.inverse_transform(np.tile(y_train.numpy().reshape(-1, 1), (1, 4)))[:, 3]  # denormalize
 
     plt.plot(range(train_pred.shape[0]), train_actual, 'r', label='Actual Trained Price')
     plt.plot(range(train_pred.shape[0]), train_pred, label='Predicted Trained Price')
@@ -121,7 +132,8 @@ if __name__ == '__main__':
 
     # Testing Data
 
-    test_pred = mns.inverse_transform(np.tile(y_test_pred.numpy().squeeze().reshape(-1, 1), (1, 4)))[:, 3]  # denormalize
+    test_pred = mns.inverse_transform(np.tile(y_test_pred.numpy().squeeze().reshape(-1, 1), (1, 4)))[:,
+                3]  # denormalize
     test_actual = mns.inverse_transform(np.tile(y_test.numpy().reshape(-1, 1), (1, 4)))[:, 3]  # denormalize
 
     plt.plot(range(test_pred.shape[0]), test_actual, 'r', label='Actual Test Price')
@@ -131,4 +143,3 @@ if __name__ == '__main__':
 
     loss = loss_fn(y_test_pred.view(-1, 1), y_test).numpy()
     print("final loss on test set:", loss)
-
