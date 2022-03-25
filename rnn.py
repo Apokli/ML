@@ -89,7 +89,7 @@ if __name__ == '__main__':
     # ------------------------------ Data Preprocessing -------------------------------
     data = read_data("dataset.csv")
     time_unit = "day"
-    prediction_period = 3  # 7 time units for a prediction
+    prediction_period = 7  # 7 time units for a prediction
     X_train, X_test, y_train, y_test, mns = preprocess_data(data, prediction_period, training_ratio=0.9,
                                                             time_sampling=time_convert[time_unit])
     print(f"shape of X_train in {time_unit}s:", X_train.shape)

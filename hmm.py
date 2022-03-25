@@ -4,7 +4,10 @@ from matplotlib import pyplot as plt
 from sklearn.preprocessing import MinMaxScaler
 from hmmlearn.hmm import GaussianHMM
 import itertools
-
+from sklearn.preprocessing import MinMaxScaler
+import torch.nn as nn
+import torch
+from time import perf_counter
 
 class HMM():
     def __init__(self, route, time_unit, period, hidden_states=3, training_ratio=0.9):
@@ -13,10 +16,12 @@ class HMM():
         self.time_sampling = self.time_convert[self.time_unit]
         self.period = period
         self.training_ratio = training_ratio
+        self.mns = MinMaxScaler()
 
         self.read_data(route)
         self.preprocess_data()
-        self.discrete_outcomes(10, 4, 4)
+
+        self.discrete_outcomes(40, 20, 20)
 
         self.hmm = GaussianHMM(n_components=hidden_states)
 
@@ -35,6 +40,8 @@ class HMM():
             data_high = np.append(data_high, np.amax(data[:, 1][(self.time_sampling * i): (self.time_sampling * (i + 1))]))
             data_low = np.append(data_low, np.amin(data[:, 2][(self.time_sampling * i): (self.time_sampling * (i + 1))]))
         data = np.column_stack((data_open, data_high, data_low, data_close))
+
+        self.mns.fit(data)
 
         # extract features
         feat_change = (data_close - data_open) / data_open
@@ -101,9 +108,30 @@ class HMM():
 if __name__ == '__main__':
     hmm = HMM("dataset.csv", "day", 7)
     hmm.fit()
+
+    start = perf_counter()
     prediction = hmm.predict("test")
+    end = perf_counter()
+    print("test pred time:", end - start)
 
     plt.plot(range(hmm.test_data[:, 3].shape[0]), hmm.test_data[:, 3], 'r', label='Actual Close Price')
     plt.plot(range(len(prediction)), prediction, label='Predicted Close Price')
     plt.legend()
     plt.show()
+
+    loss_fn = nn.MSELoss()
+
+    loss = loss_fn(torch.from_numpy(hmm.mns.transform(np.tile(np.array(prediction).reshape(-1, 1), (1, 4)))[:, 3]),
+                   torch.from_numpy(hmm.mns.transform(np.tile(hmm.test_data[:, 3].reshape(-1, 1), (1, 4)))[:, 3])).numpy()
+
+    print("final loss", loss)
+
+    # start = perf_counter()
+    # prediction = hmm.predict("train")
+    # end = perf_counter()
+    # print("test pred time:", end - start)
+    #
+    # plt.plot(range(hmm.train_data[:, 3].shape[0]), hmm.train_data[:, 3], 'r', label='Actual Close Price')
+    # plt.plot(range(len(prediction)), prediction, label='Predicted Close Price')
+    # plt.legend()
+    # plt.show()
